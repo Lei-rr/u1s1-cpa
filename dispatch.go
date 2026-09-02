@@ -92,6 +92,7 @@ func managementRoutes() managementRegistration {
 		},
 		Resources: []managementResource{
 			{Path: "/panel", Menu: "u1s1", Description: "u1s1 额度与用量面板"},
+			{Path: "/data", Menu: "", Description: "u1s1 数据接口"},
 		},
 	}
 }

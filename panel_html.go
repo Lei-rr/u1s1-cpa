@@ -243,8 +243,10 @@ function accountCard(a, dashboard) {
 
   const claims = (a.claims || []).map((c) =>
     '<div class="claim' + (c.available ? ' on' : '') + '">' +
-    '<b>' + esc(c.label) + (c.available ? ' · 可领取' : '') + '</b>' +
-    esc(c.detail) + '</div>').join('');
+    '<b>' + esc(c.label) + (c.available ? ' · 待领取' : '') + '</b>' +
+    '<span>' + esc(c.detail) + '</span>' +
+    (c.available ? ' <a href="' + esc(c.url) + '" target="_blank" style="margin-left:6px;font-weight:600;">去领取 →</a>' : '') +
+    '</div>').join('');
 
   return '<div class="acct">' +
     '<div class="acct-top">' +
@@ -263,9 +265,7 @@ function accountCard(a, dashboard) {
     '</div>' +
     (rows ? '<table><thead><tr><th>类型</th><th>额度</th><th>今日消耗</th>' +
       '<th>剩余</th><th>到期</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
-    (claims ? '<div class="claims">' + claims + '</div>' +
-      '<div class="note">领取需在站点完成人机验证：' +
-      '<a href="' + esc(dashboard) + '" target="_blank" rel="noreferrer">打开 u1s1 面板 →</a></div>' : '') +
+    (claims ? '<div class="claims">' + claims + '</div>' : '') +
     (a.error ? '<div class="err">' + esc(a.error) + '</div>' : '') +
   '</div>';
 }

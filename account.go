@@ -166,45 +166,85 @@ type Claim struct {
 // dashboardURL is where reward claims are completed.
 func dashboardURL(s Storage) string { return s.WebBase() + "/dashboard" }
 
+// hasTodayLoginCheckinPackage checks if the account already has a login_checkin package granted today (Asia/Shanghai).
+func hasTodayLoginCheckinPackage(packages []Package) (bool, string) {
+	shanghai, _ := time.LoadLocation("Asia/Shanghai")
+	if shanghai == nil {
+		shanghai = time.FixedZone("CST", 8*3600)
+	}
+	todayStr := time.Now().In(shanghai).Format("2006-01-02")
+	for _, p := range packages {
+		if p.Kind == "login_checkin" && p.CreatedAt != nil {
+			if strings.HasPrefix(*p.CreatedAt, todayStr) {
+				return true, *p.CreatedAt
+			}
+		}
+	}
+	return false, ""
+}
+
+// countLoginCheckinPackages counts how many check-in gifts this account has received.
+func countLoginCheckinPackages(packages []Package) int {
+	cnt := 0
+	for _, p := range packages {
+		if p.Kind == "login_checkin" {
+			cnt++
+		}
+	}
+	return cnt
+}
+
 // claims derives the reward list for an account snapshot.
 func claims(s Storage, a Account) []Claim {
-	out := make([]Claim, 0, 3)
+	out := make([]Claim, 0, 4)
 	url := dashboardURL(s)
 
-	checkin := Claim{Kind: ClaimCheckin, Label: "每日打卡", URL: url}
-	switch {
-	case a.Checkin == nil:
-		checkin.Detail = "网关未上报打卡状态，前往面板查看"
-	case a.Checkin.ClaimedToday:
-		checkin.Detail = fmt.Sprintf("今日已打卡 · 连续 %d 天（最长 %d 天）",
-			a.Checkin.Streak, a.Checkin.LongestStreak)
-	default:
-		checkin.Available = true
-		checkin.Detail = fmt.Sprintf("今日待打卡 · 连续 %d 天（最长 %d 天）",
-			a.Checkin.Streak, a.Checkin.LongestStreak)
+	claimedToday, lastClaimAt := hasTodayLoginCheckinPackage(a.Packages)
+	checkinCount := countLoginCheckinPackages(a.Packages)
+
+	checkin := Claim{Kind: ClaimCheckin, Label: "每日打卡 (200万 Token)", URL: url}
+	if a.Checkin != nil {
+		if a.Checkin.ClaimedToday || claimedToday {
+			checkin.Detail = fmt.Sprintf("今日已打卡 ✓ · 连续 %d 天（历史累计 %d 次）", a.Checkin.Streak, checkinCount)
+		} else {
+			checkin.Available = true
+			checkin.Detail = fmt.Sprintf("今日待打卡 · 连续 %d 天 · 点击直达领取", a.Checkin.Streak)
+		}
+	} else {
+		// Inferred from login_checkin package list
+		if claimedToday {
+			checkin.Detail = fmt.Sprintf("今日已打卡 ✓ (发放时间 %s · 累计 %d 次)", lastClaimAt, checkinCount)
+		} else {
+			checkin.Available = true
+			checkin.Detail = fmt.Sprintf("今日待打卡 (累计已打卡 %d 次) · 点击直达领取", checkinCount)
+		}
 	}
 	out = append(out, checkin)
 
-	newUser := Claim{Kind: ClaimNewUser, Label: "新用户赠送", URL: url}
-	newUser.Available = strings.EqualFold(a.NewUserClaim, "available")
-	newUser.Detail = claimDetail(newUser.Available, a.NewUserClaimBlockedReason, a.ClaimsPaused)
-	out = append(out, newUser)
+	if a.NewUserClaim != "" {
+		newUser := Claim{Kind: ClaimNewUser, Label: "新用户赠送", URL: url}
+		newUser.Available = strings.EqualFold(a.NewUserClaim, "available")
+		newUser.Detail = claimDetail(newUser.Available, a.NewUserClaimBlockedReason, a.ClaimsPaused)
+		out = append(out, newUser)
+	}
 
-	invite := Claim{Kind: ClaimInvite, Label: "邀请赠送", URL: url}
-	invite.Available = strings.EqualFold(a.InviteClaim, "available")
-	invite.Detail = claimDetail(invite.Available, a.InviteClaimBlockedReason, a.ClaimsPaused)
-	out = append(out, invite)
+	if a.InviteClaim != "" {
+		invite := Claim{Kind: ClaimInvite, Label: "邀请赠送", URL: url}
+		invite.Available = strings.EqualFold(a.InviteClaim, "available")
+		invite.Detail = claimDetail(invite.Available, a.InviteClaimBlockedReason, a.ClaimsPaused)
+		out = append(out, invite)
+	}
 
 	if a.FreeClaim != nil && *a.FreeClaim != "" {
-		label := "免费用量包可领取"
+		label := "首月免费用量包"
 		if *a.FreeClaim == "renew" {
-			label = "免费用量包可续期"
+			label = "年度免费用量包"
 		}
 		out = append(out, Claim{
 			Kind:      "free",
 			Label:     label,
 			Available: true,
-			Detail:    "前往面板领取",
+			Detail:    "可领取 · 前往面板激活",
 			URL:       url,
 		})
 	}

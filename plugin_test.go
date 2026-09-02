@@ -208,8 +208,8 @@ func TestManagementRoutesUsePluginPrefix(t *testing.T) {
 			t.Errorf("missing management route %q", path)
 		}
 	}
-	if len(routes.Resources) != 1 || routes.Resources[0].Path != "/panel" {
-		t.Errorf("resources = %#v, want a single /panel entry", routes.Resources)
+	if len(routes.Resources) != 2 || routes.Resources[0].Path != "/panel" {
+		t.Errorf("resources = %#v, want /panel and /data entries", routes.Resources)
 	}
 }
 
