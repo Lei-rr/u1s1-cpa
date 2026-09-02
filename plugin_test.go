@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
@@ -121,7 +120,6 @@ func TestIsU1S1Record(t *testing.T) {
 }
 
 func TestTrimLeadingSpace(t *testing.T) {
-	// The gateway pads non-streaming JSON with whitespace keep-alives.
 	got := trimLeadingSpace([]byte("   \n\n  {\"ok\":true}"))
 	if string(got) != `{"ok":true}` {
 		t.Errorf("trimLeadingSpace = %q", got)
@@ -148,8 +146,6 @@ func TestFrameBoundary(t *testing.T) {
 }
 
 func TestFrameDataExtractsBarePayload(t *testing.T) {
-	// CPA re-applies the "data: " prefix downstream, so the plugin must emit
-	// bare JSON. Comment keep-alives carry no data field.
 	cases := []struct {
 		name string
 		in   string
@@ -179,14 +175,12 @@ func TestUpstreamErrorPrefersGatewayMessage(t *testing.T) {
 }
 
 func TestRegistrationDeclaresOAuthScope(t *testing.T) {
-	// Models are discovered per credential, so a static executor scope would
-	// let CPA offer the executor without an auth record.
 	reg := pluginRegistration()
 	if reg.Capabilities.ExecutorModelScope != pluginapi.ExecutorModelScopeOAuth {
 		t.Errorf("executor scope = %q, want oauth", reg.Capabilities.ExecutorModelScope)
 	}
 	if reg.Metadata.Name != "u1s1" {
-		t.Errorf("plugin name = %q, want u1s1 (avoids HTML entity escaping in the UI)", reg.Metadata.Name)
+		t.Errorf("plugin name = %q, want u1s1", reg.Metadata.Name)
 	}
 }
 
@@ -214,72 +208,15 @@ func TestManagementRoutesUsePluginPrefix(t *testing.T) {
 	}
 }
 
-func TestClaimsReportCheckinAndRewards(t *testing.T) {
-	s := testStorage(t)
-	account := Account{NewUserClaim: "available", InviteClaim: "unavailable"}
-	account.Checkin = &struct {
-		ClaimedToday  bool  `json:"claimed_today"`
-		Streak        int64 `json:"streak"`
-		LongestStreak int64 `json:"longest_streak"`
-	}{ClaimedToday: false, Streak: 3, LongestStreak: 5}
-
-	got := claims(s, account)
-	byKind := map[ClaimKind]Claim{}
-	for _, c := range got {
-		byKind[c.Kind] = c
-	}
-
-	if !byKind[ClaimCheckin].Available {
-		t.Error("unclaimed check-in must be reported as available")
-	}
-	if !strings.Contains(byKind[ClaimCheckin].Detail, "连续 3 天") {
-		t.Errorf("check-in detail = %q, want the streak", byKind[ClaimCheckin].Detail)
-	}
-	if !byKind[ClaimNewUser].Available {
-		t.Error("new-user reward marked available upstream must be reported")
-	}
-	if byKind[ClaimInvite].Available {
-		t.Error("unavailable invite reward must not be reported as claimable")
-	}
-	if byKind[ClaimCheckin].URL == "" {
-		t.Error("claims must link to the dashboard where the CAPTCHA is solved")
-	}
-}
-
-func TestClaimDetailExplainsBlockers(t *testing.T) {
-	if got := claimDetail(false, "phone_required", false); !strings.Contains(got, "手机号") {
-		t.Errorf("phone_required detail = %q", got)
-	}
-	if got := claimDetail(false, "", true); !strings.Contains(got, "暂停") {
-		t.Errorf("paused detail = %q", got)
-	}
-	if got := claimDetail(true, "", false); !strings.Contains(got, "可领取") {
-		t.Errorf("available detail = %q", got)
-	}
-}
-
-func TestTodayCheckinInferenceWithUTCConversion(t *testing.T) {
-	cst := time.FixedZone("CST", 8*3600)
-	nowUTC := time.Now().UTC()
-	todayCST := nowUTC.In(cst).Format("2006-01-02")
-
-	// Create a mock timestamp in UTC that is today in CST
-	createdUTC := nowUTC.Format("2006-01-02 15:04:05")
-	pkgs := []Package{
-		{Kind: "login_checkin", CreatedAt: &createdUTC},
-	}
-	claimed, at := hasTodayLoginCheckinPackage(pkgs)
-	if !claimed {
-		t.Errorf("hasTodayLoginCheckinPackage must identify today's checkin in CST (todayCST=%s, createdUTC=%s)", todayCST, createdUTC)
-	}
-	if at == "" {
-		t.Error("at string must be set")
+func TestRemainingPackageTokens(t *testing.T) {
+	a := Account{Packages: []Package{{Remaining: 1_999_207}, {Remaining: 2_000_000}}}
+	if got := a.RemainingPackageTokens(); got != 3_999_207 {
+		t.Errorf("RemainingPackageTokens = %d", got)
 	}
 }
 
 func TestAuthParseClaimsCLIConfig(t *testing.T) {
 	s := testStorage(t)
-	// A raw CLI config has no "type" field.
 	s.Type = ""
 	raw, err := json.Marshal(s)
 	if err != nil {
@@ -302,9 +239,8 @@ func TestAuthParseClaimsCLIConfig(t *testing.T) {
 		Result struct {
 			Handled bool `json:"Handled"`
 			Auth    struct {
-				Provider string `json:"Provider"`
-				Label    string `json:"Label"`
-				// AuthData.StorageJSON is []byte, so the ABI encodes it as base64.
+				Provider    string `json:"Provider"`
+				Label       string `json:"Label"`
 				StorageJSON []byte `json:"StorageJSON"`
 			} `json:"Auth"`
 		} `json:"result"`
@@ -322,7 +258,6 @@ func TestAuthParseClaimsCLIConfig(t *testing.T) {
 		t.Errorf("label = %q, want the account email", env.Result.Auth.Label)
 	}
 
-	// The persisted record must be normalized so later loads are unambiguous.
 	stored, ok := parseStorage(env.Result.Auth.StorageJSON)
 	if !ok || stored.Type != ProviderName {
 		t.Errorf("stored type = %q, want %q", stored.Type, ProviderName)
@@ -405,14 +340,12 @@ func TestForwardHeadersDropsHopHeaders(t *testing.T) {
 }
 
 func TestRandomStateIsPathSafe(t *testing.T) {
-	// CPA rejects OAuth states containing path separators.
 	state := randomState()
 	if state == "" || strings.ContainsAny(state, "/\\") {
 		t.Errorf("state = %q, must be non-empty and path-safe", state)
 	}
 }
 
-// b64urlDecodeForTest decodes an unpadded base64url segment.
 func b64urlDecodeForTest(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
 }

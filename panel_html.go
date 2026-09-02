@@ -22,7 +22,8 @@ const panelHTML = `<!DOCTYPE html>
 body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);padding:24px}
 h1{font-size:22px;font-weight:700}
 h2{font-size:16px;font-weight:600;margin-bottom:12px}
-a{color:var(--accent)}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
 .head{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line)}
 .head p{color:var(--dim);font-size:13px;margin-top:4px}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:22px}
@@ -48,13 +49,6 @@ table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
 th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line)}
 th{color:var(--dim);font-weight:500}
 .pkg-head{font-size:13px;font-weight:600;margin-top:14px;color:var(--fg);display:flex;justify-content:space-between}
-.claims{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.claim{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;background:var(--bg);flex:1 1 240px}
-.claim b{display:block;font-size:13px;margin-bottom:2px}
-.claim.on{border-color:var(--warn);background:rgba(245,158,11,.06)}
-.claim.on b{color:var(--warn)}
-.staged-box{margin-top:12px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;background:var(--bg);font-size:12px}
-.note{color:var(--dim);font-size:12px;margin-top:10px}
 .err{color:var(--err);font-size:12px;margin-top:8px}
 .empty{text-align:center;padding:42px 16px;color:var(--dim)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--dim);border-top-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
@@ -73,12 +67,13 @@ th{color:var(--dim);font-weight:500}
 
 <div class="head">
   <h1>u1s1 额度与用量</h1>
-  <p>账号余额、用量包明细、打卡与新用户礼包状态及 CPA 代理统计</p>
+  <p>账号余额、生效用量包明细及 CPA 代理调用统计</p>
 </div>
 
 <div class="bar">
   <button class="btn" id="refresh">刷新</button>
   <button class="btn sec" id="open-import">导入 CLI 凭证</button>
+  <button class="btn sec" id="open-login-hint">OAuth 登录说明</button>
   <span id="status" class="k"></span>
 </div>
 
@@ -97,6 +92,22 @@ th{color:var(--dim);font-weight:500}
 
 <h2>账号</h2>
 <div id="list"><div class="empty"><span class="spin"></span> 正在加载…</div></div>
+
+<div class="modal" id="login-hint-modal">
+  <div class="box">
+    <h2>u1s1 设备授权登录说明</h2>
+    <div style="font-size:13px;line-height:1.6;margin:12px 0;">
+      <p style="margin-bottom:8px;">1. 在 CPA 主界面点击 <b>「u1s1 登录」</b> 会弹出授权弹窗。</p>
+      <p style="margin-bottom:8px;">2. 点击弹出的 <b>「打开链接」</b>，在浏览器里点击 <b>「批准」</b> 即可。</p>
+      <p style="margin-bottom:8px;color:var(--warn);background:rgba(245,158,11,0.08);padding:8px 10px;border-radius:6px;border:1px solid var(--warn);">
+        ⚠️ <b>注意</b>：u1s1 是设备授权流，<b>无需填写</b> 弹窗底部的「回调 URL / 远程浏览器模式」！在网页端点完批准后，CPA 会自动检测并完成保存。
+      </p>
+    </div>
+    <div class="act">
+      <button class="btn" id="close-login-hint">我知道了</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal" id="import">
   <div class="box">
@@ -236,10 +247,10 @@ function render(d) {
       '或把 ~/.u1s1/config.json 放进 CPA 认证目录并命名为 u1s1-*.json。</div>';
     return;
   }
-  el('list').innerHTML = d.accounts.map((a) => accountCard(a, d.dashboard_url)).join('');
+  el('list').innerHTML = d.accounts.map((a) => accountCard(a)).join('');
 }
 
-function accountCard(a, dashboard) {
+function accountCard(a) {
   const acc = a.account;
   const displayName = a.email || acc?.email || a.label || a.id;
   const rows = (acc?.packages || []).map((p) => {
@@ -253,25 +264,6 @@ function accountCard(a, dashboard) {
       '<td>' + esc(p.expires_at || '永不过期') + '</td>' +
       '<td>' + esc(p.note || '—') + '</td></tr>';
   }).join('');
-
-  const stagedRows = (acc?.staged_grants || []).map((g) => {
-    const srcLabel = g.source_kind === 'new_user' ? '新用户赠送待释放' : (g.source_kind === 'invite' ? '邀请赠送待释放' : '礼包待释放');
-    const remain = Math.max(0, (g.total_tokens || 0) - (g.released_tokens || 0));
-    const req = g.requirements || {};
-    const progress = (g.state === 'held') ? '正在人工复核' : ('活跃 ' + (g.active_days||0) + '/' + (req.active_days||0) + ' 天 · 请求 ' + (g.requests||0) + '/' + (req.requests||0) + ' 次 · 输出 ' + tokensCn(g.output_tokens) + '/' + tokensCn(req.output_tokens) + ' Token');
-    return '<div class="staged-box">' +
-      '<div><b>' + esc(srcLabel) + '</b> · 剩余 ' + tokensCn(remain) + ' Token</div>' +
-      '<div class="k" style="margin-top:2px;">条件进度：' + esc(progress) + '</div>' +
-      '<div class="k">达成条件后自动释放到已生效用量包</div>' +
-    '</div>';
-  }).join('');
-
-  const claims = (a.claims || []).map((c) =>
-    '<div class="claim' + (c.available ? ' on' : '') + '">' +
-    '<b>' + esc(c.label) + (c.available ? ' · 待领取' : ' · 已完成') + '</b>' +
-    '<span>' + esc(c.detail) + '</span>' +
-    (c.available ? ' <a href="' + esc(c.url) + '" target="_blank" style="margin-left:6px;font-weight:600;">去领取 →</a>' : '') +
-    '</div>').join('');
 
   return '<div class="acct">' +
     '<div class="acct-top">' +
@@ -291,12 +283,14 @@ function accountCard(a, dashboard) {
     (rows ? '<div class="pkg-head"><span>已生效用量包 (' + (acc?.packages || []).length + ' 个)</span></div>' +
       '<table><thead><tr><th>用量包名称</th><th>总额度</th><th>今日消耗</th>' +
       '<th>剩余 Token</th><th>到期时间</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<div class="k" style="margin-top:8px;">暂无生效中的用量包</div>') +
-    (stagedRows ? '<div class="pkg-head" style="margin-top:14px;"><span>阶梯解锁礼包</span></div>' + stagedRows : '') +
-    (claims ? '<div class="pkg-head" style="margin-top:14px;"><span>奖励与打卡状态</span></div><div class="claims">' + claims + '</div>' : '') +
     (a.error ? '<div class="err">' + esc(a.error) + '</div>' : '') +
   '</div>';
 }
 
+el('open-login-hint').onclick = () => el('login-hint-modal').classList.add('show');
+el('close-login-hint').onclick = () => el('login-hint-modal').classList.remove('show');
+el('open-import').onclick = () => el('import').classList.add('show');
+el('close-import').onclick = () => el('import').classList.remove('show');
 el('refresh').onclick = () => load(true);
 el('save-key').onclick = () => {
   const v = el('key').value.trim();
@@ -304,8 +298,6 @@ el('save-key').onclick = () => {
   el('auth').classList.remove('show');
   load();
 };
-el('open-import').onclick = () => el('import').classList.add('show');
-el('close-import').onclick = () => el('import').classList.remove('show');
 el('do-import').onclick = async () => {
   const raw = el('import-json').value.trim();
   if (!raw) return;

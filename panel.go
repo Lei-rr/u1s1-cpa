@@ -21,7 +21,6 @@ type AccountView struct {
 	Failed    int64  `json:"failed"`
 
 	Account *Account `json:"account,omitempty"`
-	Claims  []Claim  `json:"claims,omitempty"`
 	Error   string   `json:"error,omitempty"`
 }
 
@@ -34,7 +33,6 @@ type PanelData struct {
 	TotalTokens  int64         `json:"total_tokens"`
 	TotalSuccess int64         `json:"total_success"`
 	TotalFailed  int64         `json:"total_failed"`
-	Claimable    int           `json:"claimable"`
 	Accounts     []AccountView `json:"accounts"`
 }
 
@@ -50,8 +48,6 @@ func handleManagement(payload []byte) ([]byte, error) {
 		method = http.MethodGet
 	}
 
-	// Strip whichever prefix the host matched so one switch covers both the
-	// authenticated management routes and the unauthenticated resource route.
 	path := strings.TrimRight(strings.TrimSpace(req.Path), "/")
 	path = strings.TrimPrefix(path, "/v0/management/plugins/"+PluginID)
 	path = strings.TrimPrefix(path, "/v0/resource/plugins/"+PluginID)
@@ -136,14 +132,8 @@ func collectPanel(callbackID string) PanelData {
 		}
 
 		view.Account = &account
-		view.Claims = claims(s, account)
 		data.TotalUSD += account.RemainingUSD
 		data.TotalTokens += account.RemainingPackageTokens()
-		for _, c := range view.Claims {
-			if c.Available {
-				data.Claimable++
-			}
-		}
 		data.Accounts = append(data.Accounts, view)
 	}
 	return data
@@ -169,9 +159,6 @@ func loadCredential(authIndex string) (Storage, bool) {
 }
 
 // handleImport persists a u1s1 CLI config.json as a CPA credential.
-//
-// The credential is validated against the gateway before it is written so an
-// unusable file never enters the rotation.
 func handleImport(req managementRequest) ([]byte, error) {
 	if len(req.Body) == 0 {
 		return jsonError(http.StatusBadRequest, "请求体为空")

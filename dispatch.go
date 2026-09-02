@@ -62,15 +62,19 @@ func pluginRegistration() registration {
 			Version:          PluginVersion,
 			Author:           "Lei-rr",
 			GitHubRepository: "https://github.com/Lei-rr/u1s1-cpa",
-			ConfigFields:     []configField{},
+			ConfigFields: []configField{
+				{
+					Name:        "base-url",
+					Type:        "string",
+					Description: "u1s1 接口地址（默认 https://api.u1s1.io）；登录是设备流，浏览器批准后等待自动保存，无需填写回调 URL",
+				},
+			},
 		},
 		Capabilities: capabilities{
-			AuthProvider:       true,
-			ModelProvider:      true,
-			Executor:           true,
-			ExecutorModelScope: pluginapi.ExecutorModelScopeOAuth,
-			// u1s1 speaks OpenAI Chat Completions, so no translation is needed
-			// in either direction. CPA still bridges other client protocols.
+			AuthProvider:          true,
+			ModelProvider:         true,
+			Executor:              true,
+			ExecutorModelScope:    pluginapi.ExecutorModelScopeOAuth,
 			ExecutorInputFormats:  []string{"openai"},
 			ExecutorOutputFormats: []string{"openai"},
 			ManagementAPI:         true,
