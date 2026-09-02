@@ -60,8 +60,8 @@ func pluginRegistration() registration {
 		Metadata: metadata{
 			Name:             "u1s1",
 			Version:          PluginVersion,
-			Author:           "guolei",
-			GitHubRepository: "https://github.com/guolei/u1s1-cpa",
+			Author:           "Lei-rr",
+			GitHubRepository: "https://github.com/Lei-rr/u1s1-cpa",
 			ConfigFields:     []configField{},
 		},
 		Capabilities: capabilities{

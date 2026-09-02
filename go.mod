@@ -1,4 +1,4 @@
-module github.com/guolei/u1s1-cpa
+module github.com/Lei-rr/u1s1-cpa
 
 go 1.26.0
 
