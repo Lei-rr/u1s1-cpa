@@ -268,7 +268,7 @@ function accountCard(a, dashboard) {
 
   const claims = (a.claims || []).map((c) =>
     '<div class="claim' + (c.available ? ' on' : '') + '">' +
-    '<b>' + esc(c.label) + (c.available ? ' · 待领取' : '') + '</b>' +
+    '<b>' + esc(c.label) + (c.available ? ' · 待领取' : ' · 已完成') + '</b>' +
     '<span>' + esc(c.detail) + '</span>' +
     (c.available ? ' <a href="' + esc(c.url) + '" target="_blank" style="margin-left:6px;font-weight:600;">去领取 →</a>' : '') +
     '</div>').join('');

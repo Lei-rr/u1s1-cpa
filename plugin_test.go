@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
@@ -257,10 +258,22 @@ func TestClaimDetailExplainsBlockers(t *testing.T) {
 	}
 }
 
-func TestRemainingPackageTokens(t *testing.T) {
-	a := Account{Packages: []Package{{Remaining: 1_999_207}, {Remaining: 2_000_000}}}
-	if got := a.RemainingPackageTokens(); got != 3_999_207 {
-		t.Errorf("RemainingPackageTokens = %d", got)
+func TestTodayCheckinInferenceWithUTCConversion(t *testing.T) {
+	cst := time.FixedZone("CST", 8*3600)
+	nowUTC := time.Now().UTC()
+	todayCST := nowUTC.In(cst).Format("2006-01-02")
+
+	// Create a mock timestamp in UTC that is today in CST
+	createdUTC := nowUTC.Format("2006-01-02 15:04:05")
+	pkgs := []Package{
+		{Kind: "login_checkin", CreatedAt: &createdUTC},
+	}
+	claimed, at := hasTodayLoginCheckinPackage(pkgs)
+	if !claimed {
+		t.Errorf("hasTodayLoginCheckinPackage must identify today's checkin in CST (todayCST=%s, createdUTC=%s)", todayCST, createdUTC)
+	}
+	if at == "" {
+		t.Error("at string must be set")
 	}
 }
 

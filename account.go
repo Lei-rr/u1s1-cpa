@@ -198,17 +198,45 @@ type Claim struct {
 // dashboardURL is where reward claims are completed.
 func dashboardURL(s Storage) string { return s.WebBase() + "/dashboard" }
 
-// hasTodayLoginCheckinPackage checks if the account already has a login_checkin package granted today (Asia/Shanghai).
-func hasTodayLoginCheckinPackage(packages []Package) (bool, string) {
-	shanghai, _ := time.LoadLocation("Asia/Shanghai")
-	if shanghai == nil {
-		shanghai = time.FixedZone("CST", 8*3600)
+// parseTimeUTC parses database timestamps like "2026-09-01 16:01:20" or RFC3339 format as UTC.
+func parseTimeUTC(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
 	}
-	todayStr := time.Now().In(shanghai).Format("2006-01-02")
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02T15:04:05.000Z",
+		time.RFC3339,
+	}
+	for _, f := range formats {
+		if t, err := time.ParseInLocation(f, s, time.UTC); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// hasTodayLoginCheckinPackage checks if the account already has a login_checkin package granted today in Beijing time (UTC+8).
+func hasTodayLoginCheckinPackage(packages []Package) (bool, string) {
+	cst := time.FixedZone("CST", 8*3600)
+	nowCST := time.Now().In(cst)
+	todayStr := nowCST.Format("2006-01-02")
+
 	for _, p := range packages {
 		if p.Kind == "login_checkin" && p.CreatedAt != nil {
-			if strings.HasPrefix(*p.CreatedAt, todayStr) {
-				return true, *p.CreatedAt
+			tUTC, ok := parseTimeUTC(*p.CreatedAt)
+			if ok {
+				tCST := tUTC.In(cst)
+				if tCST.Format("2006-01-02") == todayStr {
+					return true, tCST.Format("2006-01-02 15:04:05")
+				}
+			} else {
+				// Fallback: if already string starting with today or yesterday UTC
+				if strings.HasPrefix(*p.CreatedAt, todayStr) {
+					return true, *p.CreatedAt
+				}
 			}
 		}
 	}
@@ -231,7 +259,7 @@ func claims(s Storage, a Account) []Claim {
 	out := make([]Claim, 0, 4)
 	url := dashboardURL(s)
 
-	claimedToday, lastClaimAt := hasTodayLoginCheckinPackage(a.Packages)
+	claimedToday, lastClaimAtCST := hasTodayLoginCheckinPackage(a.Packages)
 	checkinCount := countLoginCheckinPackages(a.Packages)
 
 	checkin := Claim{Kind: ClaimCheckin, Label: "每日打卡 (200万 Token)", URL: url}
@@ -243,9 +271,9 @@ func claims(s Storage, a Account) []Claim {
 			checkin.Detail = fmt.Sprintf("今日待打卡 · 连续 %d 天 · 点击直达领取", a.Checkin.Streak)
 		}
 	} else {
-		// Inferred from login_checkin package list
+		// Inferred from login_checkin package list with Beijing Time (UTC+8) conversion
 		if claimedToday {
-			checkin.Detail = fmt.Sprintf("今日已打卡 ✓ (发放时间 %s · 累计 %d 次)", lastClaimAt, checkinCount)
+			checkin.Detail = fmt.Sprintf("今日已打卡 ✓ (北京时间 %s 到账 · 累计打卡 %d 天)", lastClaimAtCST, checkinCount)
 		} else {
 			checkin.Available = true
 			checkin.Detail = fmt.Sprintf("今日待打卡 (累计已打卡 %d 次) · 点击直达领取", checkinCount)
