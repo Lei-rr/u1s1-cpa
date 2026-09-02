@@ -37,6 +37,37 @@ func (p Package) Limit() (int64, bool) {
 	return 0, false
 }
 
+// PackageLabels maps package kind codes to human-readable names.
+var PackageLabels = map[string]string{
+	"free_first":          "首月免费包",
+	"free_yearly":         "年度免费包",
+	"new_user":            "新用户赠送包",
+	"invite":              "邀请赠送包",
+	"login_checkin":       "登录打卡",
+	"login_checkin_bonus": "连续打卡加成",
+	"payment_delay_gift":  "临时加量包",
+	"topup_daily":         "每日加量包",
+	"admin_grant":         "官方赠送",
+}
+
+// StagedGrant represents a pending or held staged reward package waiting to be unlocked.
+type StagedGrant struct {
+	ID             int64   `json:"id"`
+	SourceKind     string  `json:"source_kind"` // "new_user" | "invite"
+	State          string  `json:"state"`       // "pending" | "held" | "released"
+	TotalTokens    int64   `json:"total_tokens"`
+	ReleasedTokens int64   `json:"released_tokens"`
+	ActiveDays     int64   `json:"active_days"`
+	Requests       int64   `json:"requests"`
+	OutputTokens   int64   `json:"output_tokens"`
+	CreatedAt      *string `json:"created_at"`
+	Requirements   *struct {
+		ActiveDays   int64 `json:"active_days"`
+		Requests     int64 `json:"requests"`
+		OutputTokens int64 `json:"output_tokens"`
+	} `json:"requirements"`
+}
+
 // Account is the decoded /v1/me response.
 type Account struct {
 	Email string `json:"email"`
@@ -53,7 +84,8 @@ type Account struct {
 	RemainingUSD    float64 `json:"remaining_usd"`
 	TokensPerUSD    int64   `json:"tokens_per_usd"`
 
-	Packages []Package `json:"packages"`
+	Packages     []Package     `json:"packages"`
+	StagedGrants []StagedGrant `json:"staged_grants"`
 
 	// FreeClaim is "first", "renew", or null when a free package can be claimed.
 	FreeClaim *string `json:"free_claim"`
@@ -63,7 +95,7 @@ type Account struct {
 	// Blocked reasons explain why a reward cannot be claimed yet.
 	InviteClaimBlockedReason  string `json:"invite_claim_blocked_reason"`
 	NewUserClaimBlockedReason string `json:"new_user_claim_blocked_reason"`
-	ClaimsPaused              bool  `json:"claims_paused"`
+	ClaimsPaused              bool   `json:"claims_paused"`
 
 	// Checkin is present on gateways that expose daily check-in state.
 	Checkin *struct {
@@ -222,29 +254,29 @@ func claims(s Storage, a Account) []Claim {
 	out = append(out, checkin)
 
 	if a.NewUserClaim != "" {
-		newUser := Claim{Kind: ClaimNewUser, Label: "新用户赠送", URL: url}
+		newUser := Claim{Kind: ClaimNewUser, Label: "新用户礼包 (500万/1000万 Token)", URL: url}
 		newUser.Available = strings.EqualFold(a.NewUserClaim, "available")
 		newUser.Detail = claimDetail(newUser.Available, a.NewUserClaimBlockedReason, a.ClaimsPaused)
 		out = append(out, newUser)
 	}
 
 	if a.InviteClaim != "" {
-		invite := Claim{Kind: ClaimInvite, Label: "邀请赠送", URL: url}
+		invite := Claim{Kind: ClaimInvite, Label: "邀请好友赠送 (最高1000万 Token)", URL: url}
 		invite.Available = strings.EqualFold(a.InviteClaim, "available")
 		invite.Detail = claimDetail(invite.Available, a.InviteClaimBlockedReason, a.ClaimsPaused)
 		out = append(out, invite)
 	}
 
 	if a.FreeClaim != nil && *a.FreeClaim != "" {
-		label := "首月免费用量包"
+		label := "首月免费用量包 (每天200万 Token)"
 		if *a.FreeClaim == "renew" {
-			label = "年度免费用量包"
+			label = "年度免费用量包 (每天100万 Token)"
 		}
 		out = append(out, Claim{
 			Kind:      "free",
 			Label:     label,
 			Available: true,
-			Detail:    "可领取 · 前往面板激活",
+			Detail:    "可领取/可续期 · 前往面板激活",
 			URL:       url,
 		})
 	}

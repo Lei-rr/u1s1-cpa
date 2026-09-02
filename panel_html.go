@@ -44,14 +44,16 @@ a{color:var(--accent)}
 .mini div{background:var(--bg);border-radius:8px;padding:10px}
 .mini .k{font-size:11px;text-transform:uppercase}
 .mini .v{font-size:16px;font-weight:600}
-table{width:100%;border-collapse:collapse;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
 th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line)}
 th{color:var(--dim);font-weight:500}
+.pkg-head{font-size:13px;font-weight:600;margin-top:14px;color:var(--fg);display:flex;justify-content:space-between}
 .claims{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.claim{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;background:var(--bg)}
+.claim{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;background:var(--bg);flex:1 1 240px}
 .claim b{display:block;font-size:13px;margin-bottom:2px}
-.claim.on{border-color:var(--warn)}
+.claim.on{border-color:var(--warn);background:rgba(245,158,11,.06)}
 .claim.on b{color:var(--warn)}
+.staged-box{margin-top:12px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;background:var(--bg);font-size:12px}
 .note{color:var(--dim);font-size:12px;margin-top:10px}
 .err{color:var(--err);font-size:12px;margin-top:8px}
 .empty{text-align:center;padding:42px 16px;color:var(--dim)}
@@ -71,7 +73,7 @@ th{color:var(--dim);font-weight:500}
 
 <div class="head">
   <h1>u1s1 额度与用量</h1>
-  <p>账号余额、用量包明细、领取状态与 CPA 代理调用统计</p>
+  <p>账号余额、用量包明细、打卡与新用户礼包状态及 CPA 代理统计</p>
 </div>
 
 <div class="bar">
@@ -113,10 +115,18 @@ const LOCAL_KEY = 'u1s1-cpa.management-key';
 const BASE = '/v0/management/plugins/u1s1';
 const el = (id) => document.getElementById(id);
 
-// --- management key discovery ---------------------------------------------
-// CPA's web UI stores its auth blob under 'cli-proxy-auth', obfuscated with a
-// host+UA derived XOR key. Read it from this frame and the parent so the panel
-// works both standalone and embedded.
+const PKG_LABELS = {
+  free_first: "首月免费包",
+  free_yearly: "年度免费包",
+  new_user: "新用户赠送包",
+  invite: "邀请赠送包",
+  login_checkin: "登录打卡",
+  login_checkin_bonus: "打卡加成",
+  payment_delay_gift: "临时加量包",
+  topup_daily: "每日加量包",
+  admin_grant: "官方赠送"
+};
+
 function deobfuscate(raw) {
   const PREFIX = 'enc::v1::';
   const SALT = 'cli-proxy-api-webui::secure-storage';
@@ -163,14 +173,16 @@ function managementKey() {
   return '';
 }
 
-// --- data ------------------------------------------------------------------
 let busy = false;
 
 async function call(path, init = {}) {
   const key = managementKey();
   const headers = { ...(init.headers || {}) };
   if (key) headers.Authorization = 'Bearer ' + key;
-  const resp = await fetch(BASE + path, { ...init, headers });
+  let resp = await fetch(BASE + path, { ...init, headers });
+  if (!resp.ok && (!init.method || init.method === 'GET')) {
+    resp = await fetch('/v0/resource/plugins/u1s1' + path);
+  }
   if (resp.status === 401 || resp.status === 403) {
     el('auth').classList.add('show');
     if (key) el('key').value = key;
@@ -201,7 +213,6 @@ async function load(refresh = false) {
   }
 }
 
-// --- render ----------------------------------------------------------------
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (v) => Number(v || 0).toLocaleString('en-US');
@@ -233,12 +244,25 @@ function accountCard(a, dashboard) {
   const rows = (acc?.packages || []).map((p) => {
     const limit = p.daily_tokens ?? p.total_tokens ?? 0;
     const daily = p.daily_tokens != null;
-    return '<tr><td>' + esc(p.kind) + '</td>' +
+    const kindLabel = PKG_LABELS[p.kind] || p.kind;
+    return '<tr><td><b>' + esc(kindLabel) + '</b> <small class="k">(' + esc(p.kind) + ')</small></td>' +
       '<td>' + tokensCn(limit) + (daily ? '/天' : '') + '</td>' +
       '<td>' + tokensCn(p.used_today) + '</td>' +
       '<td><b>' + tokensCn(p.remaining) + '</b></td>' +
       '<td>' + esc(p.expires_at || '永不过期') + '</td>' +
       '<td>' + esc(p.note || '—') + '</td></tr>';
+  }).join('');
+
+  const stagedRows = (acc?.staged_grants || []).map((g) => {
+    const srcLabel = g.source_kind === 'new_user' ? '新用户赠送待释放' : (g.source_kind === 'invite' ? '邀请赠送待释放' : '礼包待释放');
+    const remain = Math.max(0, (g.total_tokens || 0) - (g.released_tokens || 0));
+    const req = g.requirements || {};
+    const progress = (g.state === 'held') ? '正在人工复核' : ('活跃 ' + (g.active_days||0) + '/' + (req.active_days||0) + ' 天 · 请求 ' + (g.requests||0) + '/' + (req.requests||0) + ' 次 · 输出 ' + tokensCn(g.output_tokens) + '/' + tokensCn(req.output_tokens) + ' Token');
+    return '<div class="staged-box">' +
+      '<div><b>' + esc(srcLabel) + '</b> · 剩余 ' + tokensCn(remain) + ' Token</div>' +
+      '<div class="k" style="margin-top:2px;">条件进度：' + esc(progress) + '</div>' +
+      '<div class="k">达成条件后自动释放到已生效用量包</div>' +
+    '</div>';
   }).join('');
 
   const claims = (a.claims || []).map((c) =>
@@ -263,14 +287,15 @@ function accountCard(a, dashboard) {
         '<span style="color:var(--ok)">' + num(a.success) + '</span> / ' +
         '<span style="color:var(--err)">' + num(a.failed) + '</span></div></div>' +
     '</div>' +
-    (rows ? '<table><thead><tr><th>类型</th><th>额度</th><th>今日消耗</th>' +
-      '<th>剩余</th><th>到期</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
-    (claims ? '<div class="claims">' + claims + '</div>' : '') +
+    (rows ? '<div class="pkg-head"><span>已生效用量包 (' + (acc?.packages || []).length + ' 个)</span></div>' +
+      '<table><thead><tr><th>用量包名称</th><th>总额度</th><th>今日消耗</th>' +
+      '<th>剩余 Token</th><th>到期时间</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<div class="k" style="margin-top:8px;">暂无生效中的用量包</div>') +
+    (stagedRows ? '<div class="pkg-head" style="margin-top:14px;"><span>阶梯解锁礼包</span></div>' + stagedRows : '') +
+    (claims ? '<div class="pkg-head" style="margin-top:14px;"><span>奖励与打卡状态</span></div><div class="claims">' + claims + '</div>' : '') +
     (a.error ? '<div class="err">' + esc(a.error) + '</div>' : '') +
   '</div>';
 }
 
-// --- events ----------------------------------------------------------------
 el('refresh').onclick = () => load(true);
 el('save-key').onclick = () => {
   const v = el('key').value.trim();
