@@ -179,8 +179,8 @@ func TestRegistrationDeclaresOAuthScope(t *testing.T) {
 	if reg.Capabilities.ExecutorModelScope != pluginapi.ExecutorModelScopeOAuth {
 		t.Errorf("executor scope = %q, want oauth", reg.Capabilities.ExecutorModelScope)
 	}
-	if reg.Metadata.Name != "u1s1" {
-		t.Errorf("plugin name = %q, want u1s1", reg.Metadata.Name)
+	if reg.Metadata.Name != "U1S1-CPA" {
+		t.Errorf("plugin name = %q, want U1S1-CPA", reg.Metadata.Name)
 	}
 }
 

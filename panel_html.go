@@ -8,7 +8,7 @@ const panelHTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>u1s1 · 额度与用量</title>
+<title>U1S1-CPA · 额度与用量</title>
 <style>
 :root{
   --bg:#0f172a; --card:#1e293b; --raise:#334155;
@@ -66,7 +66,7 @@ th{color:var(--dim);font-weight:500}
 <body>
 
 <div class="head">
-  <h1>u1s1 额度与用量</h1>
+  <h1>U1S1-CPA 额度与用量</h1>
   <p>账号余额、生效用量包明细及 CPA 代理调用统计</p>
 </div>
 

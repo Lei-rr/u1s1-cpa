@@ -58,7 +58,7 @@ func pluginRegistration() registration {
 	return registration{
 		SchemaVersion: 1,
 		Metadata: metadata{
-			Name:             "u1s1",
+			Name:             "U1S1-CPA",
 			Version:          PluginVersion,
 			Author:           "Lei-rr",
 			GitHubRepository: "https://github.com/Lei-rr/u1s1-cpa",
@@ -95,7 +95,7 @@ func managementRoutes() managementRegistration {
 			{Method: http.MethodPost, Path: base + "/import", Description: "Import a u1s1 CLI config.json as a credential"},
 		},
 		Resources: []managementResource{
-			{Path: "/panel", Menu: "u1s1", Description: "u1s1 额度与用量面板"},
+			{Path: "/panel", Menu: "U1S1-CPA", Description: "U1S1-CPA 额度与用量面板"},
 			{Path: "/data", Menu: "", Description: "u1s1 数据接口"},
 		},
 	}

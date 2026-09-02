@@ -16,7 +16,7 @@ const (
 	// PluginID must match the dynamic library file name; CPA derives the plugin ID from it.
 	PluginID = "u1s1"
 	// PluginVersion is reported to the CPA plugin registry.
-	PluginVersion = "0.2.0"
+	PluginVersion = "0.2.6"
 	// ProviderName is the CPA provider key owned by this plugin.
 	ProviderName = "u1s1"
 
