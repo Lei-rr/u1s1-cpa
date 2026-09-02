@@ -1,0 +1,121 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          cache: true
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The plugin is cgo, so each target is built on its native runner.
+          # Linux uses the oldest supported glibc image so the .so loads inside
+          # the Debian Bookworm CPA container.
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-22.04
+          - goos: darwin
+            goarch: arm64
+            runner: macos-14
+          - goos: darwin
+            goarch: amd64
+            runner: macos-13
+          - goos: windows
+            goarch: amd64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          cache: true
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(cat VERSION)"
+          case "${{ matrix.goos }}" in
+            linux)   EXT=so ;;
+            darwin)  EXT=dylib ;;
+            windows) EXT=dll ;;
+          esac
+          mkdir -p dist
+          CGO_ENABLED=1 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -buildmode=c-shared -ldflags '-s -w' -o "dist/u1s1.$EXT" .
+          rm -f dist/u1s1.h
+          echo "asset=u1s1_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip" >> "$GITHUB_ENV"
+          echo "lib=u1s1.$EXT" >> "$GITHUB_ENV"
+
+      - name: Package
+        shell: bash
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          if command -v zip >/dev/null 2>&1; then
+            zip -q -X "$asset" "$lib"
+          else
+            # Windows runners ship PowerShell instead of zip.
+            powershell -Command "Compress-Archive -Path '$lib' -DestinationPath '$asset' -Force"
+          fi
+          sha256sum "$asset" > "$asset.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: u1s1-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            dist/u1s1.so
+            dist/u1s1.dylib
+            dist/u1s1.dll
+          if-no-files-found: error
+
+  release:
+    # Publishing a tag is all it takes to ship an update: the CPA plugin store
+    # reads the latest release of this repository.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -name '*.zip' -exec cp {} release/ \;
+          # The store expects a single sha256sum-format checksums.txt.
+          find artifacts -name '*.sha256' -exec cat {} \; | sort > release/checksums.txt
+          ls -l release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.zip
+            release/checksums.txt
+          generate_release_notes: true
