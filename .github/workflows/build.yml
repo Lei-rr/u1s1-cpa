@@ -82,7 +82,11 @@ jobs:
             # Windows runners ship PowerShell instead of zip.
             powershell -Command "Compress-Archive -Path '$lib' -DestinationPath '$asset' -Force"
           fi
-          sha256sum "$asset" > "$asset.sha256"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$asset" > "$asset.sha256"
+          else
+            shasum -a 256 "$asset" > "$asset.sha256"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
