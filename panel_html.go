@@ -241,6 +241,7 @@ function render(d) {
 
 function accountCard(a, dashboard) {
   const acc = a.account;
+  const displayName = a.email || acc?.email || a.label || a.id;
   const rows = (acc?.packages || []).map((p) => {
     const limit = p.daily_tokens ?? p.total_tokens ?? 0;
     const daily = p.daily_tokens != null;
@@ -274,7 +275,7 @@ function accountCard(a, dashboard) {
 
   return '<div class="acct">' +
     '<div class="acct-top">' +
-      '<div class="who">' + esc(a.email || a.label || a.id) +
+      '<div class="who">' + esc(displayName) +
         '<small>' + esc(a.id) + '</small></div>' +
       '<span class="pill' + (a.disabled ? ' off' : '') + '">' +
         (a.disabled ? '已禁用' : '正常') + '</span>' +
